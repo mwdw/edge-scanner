@@ -50,7 +50,7 @@ with st.sidebar:
     st.markdown("## ⚙️ Controls")
     min_delta = st.slider("Min edge (pp)", min_value=1, max_value=25, value=5, step=1) / 100
     min_liquidity = st.number_input(
-        "Min Polymarket liquidity ($)", value=1_000, step=500, min_value=0
+        "Min Polymarket liquidity ($)", value=10_000, step=5_000, min_value=0
     )
     direction = st.radio(
         "Direction filter",
