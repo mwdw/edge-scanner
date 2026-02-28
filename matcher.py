@@ -3,19 +3,21 @@ from difflib import SequenceMatcher
 
 
 def _sim(a, b):
+    a = a or ""
+    b = b or ""
     return SequenceMatcher(None, a.lower().strip(), b.lower().strip()).ratio()
 
 
 def _clean(text):
     """Lowercase, remove punctuation noise."""
-    return text.lower().replace(".", "").replace(",", "").replace("  ", " ").strip()
+    return (text or "").lower().replace(".", "").replace(",", "").replace("  ", " ").strip()
 
 
 def _event_text(event):
     return " ".join(filter(None, [
-        event.get("sport_title", ""),
-        event.get("home_team", ""),
-        event.get("away_team", ""),
+        event.get("sport_title") or "",
+        event.get("home_team") or "",
+        event.get("away_team") or "",
     ]))
 
 
@@ -26,9 +28,9 @@ def find_best_event(poly_market, odds_events, threshold=0.28):
         text = _event_text(event)
         score = max(
             _sim(question, text),
-            _sim(question, event.get("home_team", "")),
-            _sim(question, event.get("away_team", "")),
-            _sim(question, event.get("sport_title", "")),
+            _sim(question, event.get("home_team") or ""),
+            _sim(question, event.get("away_team") or ""),
+            _sim(question, event.get("sport_title") or ""),
         )
         if any(o.lower() in text.lower() for o in poly_market.get("outcomes", []) if len(o) > 3):
             score += 0.12
@@ -59,7 +61,6 @@ def find_poly_for_candidate(candidate_name, poly_markets, threshold=0.40):
     Returns (poly_market, yes_probability) or (None, None).
     """
     candidate_clean = _clean(candidate_name)
-    # Significant name tokens (skip single chars like middle initials after clean)
     name_parts = [w for w in candidate_clean.split() if len(w) > 1]
 
     best_market, best_prob, best_score = None, None, 0.0
@@ -67,19 +68,15 @@ def find_poly_for_candidate(candidate_name, poly_markets, threshold=0.40):
     for pm in poly_markets:
         q_clean = _clean(pm["question"])
 
-        # Fraction of candidate name parts found verbatim in the question
         parts_hit = sum(1 for p in name_parts if p in q_clean)
         part_ratio = parts_hit / len(name_parts) if name_parts else 0.0
 
-        # Fuzzy similarity between candidate name and question
         fuzz = _sim(candidate_clean, q_clean)
-
         score = max(fuzz, part_ratio)
 
         if score > best_score:
             outcomes = pm.get("outcomes", [])
             probs = pm.get("probabilities", [])
-            # Must be a binary Yes/No market
             if "Yes" in outcomes:
                 yes_idx = outcomes.index("Yes")
                 if yes_idx < len(probs):
