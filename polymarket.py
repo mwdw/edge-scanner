@@ -1,6 +1,7 @@
 """Polymarket Gamma API client."""
 import json
 import requests
+from datetime import datetime, timezone
 
 POLY_API_BASE = "https://gamma-api.polymarket.com"
 
@@ -15,6 +16,7 @@ def fetch_political_markets(limit=200):
     except Exception:
         return []
 
+    now = datetime.now(timezone.utc)
     markets = []
     for m in raw:
         try:
@@ -26,6 +28,21 @@ def fetch_political_markets(limit=200):
                 prices = json.loads(prices)
             if not outcomes or not prices or len(outcomes) != len(prices):
                 continue
+
+            # Parse end date
+            end_date_raw = m.get("endDate") or m.get("end_date_iso") or m.get("endDateIso")
+            end_date = None
+            days_to_end = None
+            if end_date_raw:
+                try:
+                    dt = datetime.fromisoformat(end_date_raw.replace("Z", "+00:00"))
+                    if dt.tzinfo is None:
+                        dt = dt.replace(tzinfo=timezone.utc)
+                    end_date = dt.isoformat()
+                    days_to_end = (dt - now).days
+                except Exception:
+                    pass
+
             markets.append({
                 "id": m.get("id"),
                 "question": m.get("question", "").strip(),
@@ -33,6 +50,8 @@ def fetch_political_markets(limit=200):
                 "probabilities": [float(p) for p in prices],
                 "liquidity": float(m.get("liquidity") or 0),
                 "volume": float(m.get("volume") or 0),
+                "end_date": end_date,
+                "days_to_end": days_to_end,
                 "url": f"https://polymarket.com/event/{m.get('slug', '')}",
             })
         except Exception:
@@ -40,14 +59,21 @@ def fetch_political_markets(limit=200):
     return markets
 
 
-def filter_markets(markets, min_liquidity=10_000, min_volume=0):
-    """Filter to markets meeting BOTH liquidity and volume thresholds.
+def filter_markets(markets, min_liquidity=50_000, max_days=None):
+    """Filter markets by liquidity and optional days-to-resolution cap.
 
-    Uses AND logic so a high-volume but illiquid market (thin book, stale)
-    cannot slip through the liquidity gate.
+    Args:
+        min_liquidity: Minimum current liquidity (strict AND gate).
+        max_days: Only include markets resolving within this many days.
+                  None = no date filter.
     """
-    return [
-        m for m in markets
-        if m["liquidity"] >= min_liquidity
-        and (min_volume == 0 or m["volume"] >= min_volume)
-    ]
+    result = []
+    for m in markets:
+        if m["liquidity"] < min_liquidity:
+            continue
+        if max_days is not None:
+            d = m.get("days_to_end")
+            if d is None or d < 0 or d > max_days:
+                continue
+        result.append(m)
+    return result
