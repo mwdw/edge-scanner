@@ -27,7 +27,7 @@ st.set_page_config(
 
 # ── Password gate ─────────────────────────────────────────────────────────────
 def _check_password() -> bool:
-    expected = st.secrets.get("APP_PASSWORD", "")
+    expected = st.secrets.get("APP_PASSWORD", ""
     if not expected:
         return True
     if st.session_state.get("_auth"):
@@ -81,7 +81,9 @@ def _run_scan(odds_key: str, min_liq: float, max_days) -> tuple[list[dict], int,
         return [], 0, 0, ""
 
     poly_all = fetch_political_markets()
-    poly_mkts = filter_markets(poly_all, min_liquidity=min_liq, max_days=max_days)
+    poly_mkts = filter_markets(poly_all, min_liquidity=min_liq)
+    if max_days is not None:
+        poly_mkts = [m for m in poly_mkts if m.get("days_to_end") is not None and 0 <= m["days_to_end"] <= max_days]
     odds_events = fetch_all_political(odds_key)
 
     alerts, n_unmatched = [], 0
