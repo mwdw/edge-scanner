@@ -27,7 +27,7 @@ st.set_page_config(
 
 # ── Password gate ─────────────────────────────────────────────────────────────
 def _check_password() -> bool:
-    expected = st.secrets.get("APP_PASSWORD", ""
+    expected = st.secrets.get("APP_PASSWORD", "")
     if not expected:
         return True
     if st.session_state.get("_auth"):
