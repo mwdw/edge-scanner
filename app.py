@@ -20,7 +20,7 @@ from matcher import find_best_event, find_matching_outcome, find_poly_for_candid
 # ── Page config ──────────────────────────────────────────────────────────────
 st.set_page_config(
     page_title="Edge Scanner",
-    page_icon="📡",
+    page_icon="U0001f4e1",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -32,7 +32,7 @@ def _check_password() -> bool:
         return True
     if st.session_state.get("_auth"):
         return True
-    st.markdown("## 📡 Edge Scanner")
+    st.markdown("## U0001f4e1 Edge Scanner")
     pw = st.text_input("Password", type="password", key="_pw_input")
     if st.button("Enter"):
         if pw == expected:
@@ -50,35 +50,38 @@ with st.sidebar:
     st.markdown("## ⚙️ Controls")
     min_delta = st.slider("Min edge (pp)", min_value=1, max_value=25, value=5, step=1) / 100
     min_liquidity = st.number_input(
-        "Min Polymarket liquidity ($)", value=10_000, step=5_000, min_value=0
+        "Min Polymarket liquidity ($)", value=50_000, step=10_000, min_value=0
     )
+    days_opts = {"7 days": 7, "14 days": 14, "30 days": 30, "60 days": 60, "90 days": 90, "Any": None}
+    days_label = st.selectbox("Resolves within", list(days_opts.keys()), index=2)
+    max_days = days_opts[days_label]
     direction = st.radio(
         "Direction filter",
         options=["Both", "Poly > Bookie (under-priced by bookie)", "Bookie > Poly (under-priced by Poly)"],
         index=0,
     )
     st.divider()
-    do_refresh = st.button("🔄 Run scan", use_container_width=True)
+    do_refresh = st.button("U0001f504 Run scan", use_container_width=True)
     st.divider()
     st.markdown("**Data sources**")
-    st.caption("🟢 Polymarket (public, no key needed)")
+    st.caption("U0001f7e2 Polymarket (public, no key needed)")
     odds_key = st.secrets.get("ODDS_API_KEY", "")
     if odds_key:
-        st.caption("🟢 The Odds API — UK/EU/US bookmakers")
+        st.caption("U0001f7e2 The Odds API — UK/EU/US bookmakers")
     else:
-        st.caption("🔴 The Odds API — add ODDS_API_KEY in secrets")
+        st.caption("U0001f534 The Odds API — add ODDS_API_KEY in secrets")
     st.divider()
     st.caption("Cache: 30 min | Click 'Run scan' to force refresh")
 
 # ── Core scan logic ───────────────────────────────────────────────────────────
 @st.cache_data(ttl=1800, show_spinner=False)
-def _run_scan(odds_key: str, min_liq: float) -> tuple[list[dict], int, int, str]:
+def _run_scan(odds_key: str, min_liq: float, max_days) -> tuple[list[dict], int, int, str]:
     """Returns (alerts, n_poly_markets, n_unmatched, timestamp)."""
     if not odds_key:
         return [], 0, 0, ""
 
     poly_all = fetch_political_markets()
-    poly_mkts = filter_markets(poly_all, min_liquidity=min_liq)
+    poly_mkts = filter_markets(poly_all, min_liquidity=min_liq, max_days=max_days)
     odds_events = fetch_all_political(odds_key)
 
     alerts, n_unmatched = [], 0
@@ -115,10 +118,11 @@ def _run_scan(odds_key: str, min_liq: float) -> tuple[list[dict], int, int, str]
                         "match_score": match_score,
                         "liquidity": pm["liquidity"],
                         "volume": pm["volume"],
+                        "days_to_end": pm.get("days_to_end"),
                         "url": pm["url"],
                     })
 
-    # Pass 2: outright markets — match each candidate to a Polymarket binary
+    # Pass 2: outright markets
     for event in odds_events:
         for bookmaker in event.get("bookmakers", []):
             bm_name = bookmaker["title"]
@@ -130,11 +134,9 @@ def _run_scan(odds_key: str, min_liq: float) -> tuple[list[dict], int, int, str]
                     candidate = bm_outcome["name"]
                     dec_odds = bm_outcome["price"]
                     bookie_fair_prob = fair.get(candidate, 0.0)
-
                     poly_market, poly_prob = find_poly_for_candidate(candidate, poly_mkts)
                     if poly_market is None or poly_prob is None:
                         continue
-
                     delta = poly_prob - bookie_fair_prob
                     alerts.append({
                         "question": poly_market["question"],
@@ -147,6 +149,7 @@ def _run_scan(odds_key: str, min_liq: float) -> tuple[list[dict], int, int, str]
                         "match_score": 0.9,
                         "liquidity": poly_market["liquidity"],
                         "volume": poly_market["volume"],
+                        "days_to_end": poly_market.get("days_to_end"),
                         "url": poly_market["url"],
                     })
 
@@ -162,7 +165,7 @@ def _run_scan(odds_key: str, min_liq: float) -> tuple[list[dict], int, int, str]
     return unique, len(poly_mkts), n_unmatched, ts
 
 # ── Main view ─────────────────────────────────────────────────────────────────
-st.markdown("# 📡 Edge Scanner")
+st.markdown("# U0001f4e1 Edge Scanner")
 st.caption("Political market probability gaps between Polymarket and bookmakers")
 
 if do_refresh:
@@ -173,7 +176,7 @@ if not odds_key:
     st.stop()
 
 with st.spinner("Fetching markets and odds…"):
-    alerts, n_poly, n_unmatched, scan_ts = _run_scan(odds_key, min_liquidity)
+    alerts, n_poly, n_unmatched, scan_ts = _run_scan(odds_key, min_liquidity, max_days)
 
 filtered = alerts
 if "Poly > Bookie" in direction:
@@ -190,12 +193,15 @@ c4.metric("Last scan", scan_ts or "—")
 st.divider()
 
 if not filtered:
-    st.info(f"No edges ≥ {min_delta:.0%} found. Try lowering the threshold, or scan a different direction.")
+    st.info(f"No edges ≥ {min_delta:.0%} found. Try lowering the threshold or adjusting filters.")
 else:
     rows = []
     for a in filtered:
+        dte = a.get("days_to_end")
+        days_str = f"{dte}d" if dte is not None else "?"
         rows.append({
-            "Market": a["question"][:65] + ("…" if len(a["question"]) > 65 else ""),
+            "Market": a["question"][:60] + ("…" if len(a["question"]) > 60 else ""),
+            "Resolves": days_str,
             "Outcome": a["outcome"],
             "Poly %": round(a["poly_prob"] * 100, 1),
             "Bookie %": round(a["bookie_prob"] * 100, 1),
@@ -222,17 +228,20 @@ else:
 
     st.subheader("Detail view")
     for i, a in enumerate(filtered):
+        dte = a.get("days_to_end")
+        days_str = f"{dte} days" if dte is not None else "unknown"
         edge_sign = "▲" if a["delta"] > 0 else "▼"
         edge_label = f"{edge_sign} {abs(a['delta'])*100:.1f}pp"
         direction_label = "POLY > BOOKIE" if a["delta"] > 0 else "BOOKIE > POLY"
-        with st.expander(f"#{i+1} {a['question'][:72]} — {edge_label}"):
+        with st.expander(f"#{i+1} {a['question'][:68]} — {edge_label}"):
             col1, col2, col3, col4 = st.columns(4)
             col1.metric("Polymarket", f"{a['poly_prob']:.1%}")
             col2.metric("Bookie (fair)", f"{a['bookie_prob']:.1%}")
             col3.metric("Edge", edge_label)
-            col4.metric("Direction", direction_label)
+            col4.metric("Resolves in", days_str)
             st.markdown(
                 f"**Outcome:** {a['outcome']} \n"
+                f"**Direction:** {direction_label} \n"
                 f"**Bookmaker:** {a['bookmaker']} @ {a['decimal_odds']} \n"
                 f"**Poly liquidity:** ${a['liquidity']:,.0f} | **Volume:** ${a['volume']:,.0f} \n"
                 f"**Match confidence:** {a['match_score']:.0%}"
