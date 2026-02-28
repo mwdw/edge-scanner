@@ -77,3 +77,4 @@ def filter_markets(markets, min_liquidity=50_000, max_days=None):
                 continue
         result.append(m)
     return result
+    
