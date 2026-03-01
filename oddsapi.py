@@ -42,8 +42,13 @@ def fetch_odds(api_key, sport_key, regions="uk,us,eu", market_type="outrights"):
 
 
 def fetch_all_political(api_key, regions="uk,us,eu"):
+    # Dynamically discover all active political sport keys
+    all_sports = fetch_sports(api_key)
+    political_keys = [s["key"] for s in all_sports if s.get("group") == "Politics" and s.get("active")]
+    if not political_keys:
+        political_keys = POLITICAL_SPORT_KEYS  # fallback if discovery fails
     events = []
-    for key in POLITICAL_SPORT_KEYS:
+    for key in political_keys:
         events.extend(fetch_odds(api_key, key, regions, market_type="outrights"))
     return events
 
