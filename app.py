@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 from polymarket import fetch_political_markets, filter_markets
 from oddsapi import fetch_all_political, fair_probabilities
 from matcher import find_best_event, find_matching_outcome, find_poly_for_candidate
+from betfair import fetch_political_events
 
 # ── Page config ──────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -69,13 +70,21 @@ with st.sidebar:
     if odds_key:
         st.caption("U0001f7e2 The Odds API — UK/EU/US bookmakers")
     else:
-        st.caption("U0001f534 The Odds API — add ODDS_API_KEY in secrets")
+        st.caption("\u274c The Odds API — add ODDS_API_KEY in secrets")
+    bf_app_key = st.secrets.get("BETFAIR_APP_KEY", "")
+    bf_username = st.secrets.get("BETFAIR_USERNAME", "")
+    bf_password = st.secrets.get("BETFAIR_PASSWORD", "")
+    bf_creds = (bf_app_key, bf_username, bf_password)
+    if bf_app_key and bf_username and bf_password:
+        st.caption("\u2705 Betfair Exchange — political markets enabled")
+    else:
+        st.caption("\U0001f7e0 Betfair Exchange — add BETFAIR_APP_KEY / USERNAME / PASSWORD in secrets")
     st.divider()
     st.caption("Cache: 30 min | Click 'Run scan' to force refresh")
 
 # ── Core scan logic ───────────────────────────────────────────────────────────
 @st.cache_data(ttl=1800, show_spinner=False)
-def _run_scan(odds_key: str, min_liq: float, max_days) -> tuple[list[dict], int, int, str]:
+def _run_scan(odds_key: str, min_liq: float, max_days, bf_creds: tuple = ()) -> tuple[list[dict], int, int, str]:
     """Returns (alerts, n_poly_markets, n_unmatched, timestamp)."""
     if not odds_key:
         return [], 0, 0, ""
@@ -85,6 +94,9 @@ def _run_scan(odds_key: str, min_liq: float, max_days) -> tuple[list[dict], int,
     if max_days is not None:
         poly_mkts = [m for m in poly_mkts if m.get("days_to_end") is not None and 0 <= m["days_to_end"] <= max_days]
     odds_events = fetch_all_political(odds_key)
+    if bf_creds and all(bf_creds):
+        bf_events = fetch_political_events(*bf_creds)
+        odds_events = odds_events + bf_events
 
     alerts, n_unmatched = [], 0
 
@@ -178,7 +190,7 @@ if not odds_key:
     st.stop()
 
 with st.spinner("Fetching markets and odds…"):
-    alerts, n_poly, n_unmatched, scan_ts = _run_scan(odds_key, min_liquidity, max_days)
+    alerts, n_poly, n_unmatched, scan_ts = _run_scan(odds_key, min_liquidity, max_days, bf_creds)
 
 filtered = alerts
 if "Poly > Bookie" in direction:
